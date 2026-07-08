@@ -1,0 +1,388 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ledger — a 12-line stock checklist</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#12201c; --ink-2:#1b2b25; --paper:#f1efe5; --paper-dim:#d9d6c8;
+    --moss:#8fa888; --brass:#c9a227; --brass-dim:#a3872a; --risk:#b5483c; --line:rgba(241,239,229,0.14);
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--ink);}
+  body{font-family:'IBM Plex Sans',sans-serif;color:var(--paper);}
+  .ledger-app{min-height:100vh;padding:32px 20px 60px;display:flex;justify-content:center;}
+  .ledger-shell{width:100%;max-width:760px;}
+
+  .ledger-header{display:flex;align-items:baseline;justify-content:space-between;border-bottom:1px solid var(--line);padding-bottom:16px;margin-bottom:20px;flex-wrap:wrap;gap:8px;}
+  .ledger-title{font-family:'Fraunces',serif;font-weight:600;font-size:28px;letter-spacing:0.2px;}
+  .ledger-title span{color:var(--moss);}
+  .ledger-sub{font-size:12px;color:var(--paper-dim);letter-spacing:0.06em;text-transform:uppercase;}
+
+  .settings{background:var(--ink-2);border:1px solid var(--line);border-radius:4px;padding:14px 16px;margin-bottom:20px;font-size:12.5px;}
+  .settings summary{cursor:pointer;color:var(--paper-dim);font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:0.03em;list-style:none;}
+  .settings summary::-webkit-details-marker{display:none;}
+  .settings summary:before{content:"▸ ";color:var(--moss);}
+  .settings[open] summary:before{content:"▾ ";}
+  .settings-body{margin-top:12px;display:flex;flex-direction:column;gap:10px;}
+  .settings-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+  .settings label{color:var(--paper-dim);min-width:80px;font-size:12px;}
+  .settings input[type=password], .settings input[type=text], .settings select{
+    flex:1;min-width:180px;background:var(--ink);border:1px solid var(--line);border-radius:3px;color:var(--paper);
+    font-family:'IBM Plex Mono',monospace;font-size:12.5px;padding:8px 10px;
+  }
+  .settings-btn{background:var(--moss);border:none;color:var(--ink);font-weight:600;font-size:12px;padding:8px 14px;border-radius:3px;cursor:pointer;}
+  .settings-btn:hover{background:#a2bb9b;}
+  .key-status{font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--moss);}
+  .key-status.missing{color:var(--risk);}
+  .settings-note{color:var(--paper-dim);line-height:1.5;font-size:11.5px;}
+  .settings-note a{color:var(--moss);}
+
+  .search-row{display:flex;gap:10px;margin-bottom:8px;}
+  .ticker-input{flex:1;background:var(--ink-2);border:1px solid var(--line);border-radius:3px;color:var(--paper);
+    font-family:'IBM Plex Mono',monospace;font-size:16px;letter-spacing:0.04em;padding:12px 14px;text-transform:uppercase;}
+  .ticker-input::placeholder{color:var(--paper-dim);text-transform:none;font-family:'IBM Plex Sans',sans-serif;}
+  .ticker-input:focus{outline:2px solid var(--moss);outline-offset:1px;}
+  .research-btn{background:var(--moss);border:none;color:var(--ink);font-weight:600;font-size:14px;letter-spacing:0.03em;
+    padding:0 22px;border-radius:3px;cursor:pointer;transition:background 0.15s ease;}
+  .research-btn:hover{background:#a2bb9b;}
+  .research-btn:disabled{background:var(--paper-dim);cursor:default;}
+  .research-btn:focus-visible{outline:2px solid var(--brass);outline-offset:2px;}
+
+  .status-line{font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:var(--moss);min-height:18px;margin-bottom:20px;}
+  .status-line.err{color:var(--risk);}
+
+  .history-row{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:28px;}
+  .history-chip{font-family:'IBM Plex Mono',monospace;font-size:11.5px;background:var(--ink-2);border:1px solid var(--line);
+    color:var(--paper-dim);padding:5px 10px;border-radius:20px;cursor:pointer;}
+  .history-chip:hover{border-color:var(--moss);color:var(--paper);}
+  .history-clear{font-size:11px;color:var(--paper-dim);background:none;border:none;text-decoration:underline;cursor:pointer;padding:5px 4px;}
+
+  .report{background:var(--paper);color:var(--ink);border-radius:4px;padding:28px 26px 20px;position:relative;overflow:hidden;}
+  .stamp{position:absolute;top:22px;right:-8px;font-family:'Fraunces',serif;font-weight:600;font-size:22px;letter-spacing:0.12em;
+    padding:6px 22px 6px 18px;border:3px solid currentColor;border-radius:3px;transform:rotate(6deg);text-transform:uppercase;opacity:0.92;}
+  .stamp.buy{color:#3c6e4d;} .stamp.hold{color:var(--brass-dim);} .stamp.pass{color:var(--risk);}
+
+  .report-head{max-width:78%;margin-bottom:6px;}
+  .company-name{font-family:'Fraunces',serif;font-weight:600;font-size:24px;margin:0 0 2px;}
+  .company-meta{font-family:'IBM Plex Mono',monospace;font-size:12px;color:#5a5a4d;margin-bottom:14px;}
+  .thesis{font-size:14.5px;line-height:1.5;color:#333026;margin-bottom:20px;padding-bottom:18px;border-bottom:1px solid var(--paper-dim);}
+
+  .criteria-list{list-style:none;margin:0 0 18px;padding:0;}
+  .criteria-row{display:grid;grid-template-columns:24px 150px 46px 1fr;gap:10px;align-items:start;padding:9px 0;
+    border-bottom:1px solid var(--paper-dim);font-size:13.5px;}
+  .crit-num{font-family:'IBM Plex Mono',monospace;color:#8a8672;font-size:12px;padding-top:1px;}
+  .crit-name{font-weight:600;color:#25231c;}
+  .crit-score{font-family:'IBM Plex Mono',monospace;font-weight:500;text-align:right;padding-right:4px;}
+  .crit-score.s5,.crit-score.s4{color:#3c6e4d;} .crit-score.s3{color:var(--brass-dim);} .crit-score.s2,.crit-score.s1{color:var(--risk);}
+  .crit-note{color:#403d31;line-height:1.4;}
+
+  .risks-box{background:rgba(181,72,60,0.08);border-left:3px solid var(--risk);padding:12px 14px;font-size:13px;
+    line-height:1.5;margin-bottom:18px;color:#3b2a26;}
+  .risks-box strong{display:block;margin-bottom:4px;color:var(--risk);font-size:12px;letter-spacing:0.04em;text-transform:uppercase;}
+
+  .rating-trio{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px;}
+  .rating-box{background:var(--ink);border-radius:4px;padding:14px 12px;text-align:center;}
+  .rating-label{font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:0.05em;text-transform:uppercase;color:var(--paper-dim);margin-bottom:6px;}
+  .rating-value{font-family:'Fraunces',serif;font-weight:600;font-size:24px;color:var(--paper);line-height:1;margin-bottom:6px;}
+  .rating-value small{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--paper-dim);font-weight:400;}
+  .rating-value.buyprice{font-size:17px;}
+  .rating-note{font-size:11px;color:var(--paper-dim);line-height:1.4;}
+
+  .report-footer{font-size:11px;color:#7a765f;line-height:1.5;padding-top:8px;}
+
+  .disclaimer{margin-top:28px;font-size:11.5px;color:var(--paper-dim);line-height:1.6;border-top:1px solid var(--line);padding-top:14px;}
+  .raw-fallback{background:var(--ink-2);border:1px solid var(--line);border-radius:4px;padding:16px;
+    font-family:'IBM Plex Mono',monospace;font-size:12px;white-space:pre-wrap;color:var(--paper-dim);}
+
+  @media (max-width:520px){
+    .criteria-row{grid-template-columns:20px 100px 36px 1fr;font-size:12.5px;}
+    .stamp{font-size:16px;padding:5px 14px;top:16px;right:-6px;}
+    .company-name{font-size:20px;}
+    .rating-trio{grid-template-columns:1fr;}
+  }
+</style>
+</head>
+<body>
+<div class="ledger-app">
+  <div class="ledger-shell">
+    <div class="ledger-header">
+      <div>
+        <div class="ledger-title">Ledger<span>.</span></div>
+        <div class="ledger-sub">a 12-line checklist, run against the public record</div>
+      </div>
+    </div>
+
+    <details class="settings" id="settingsPanel">
+      <summary>API key & model</summary>
+      <div class="settings-body">
+        <div class="settings-row">
+          <label for="apiKeyInput">API key</label>
+          <input type="password" id="apiKeyInput" placeholder="AIza...">
+          <button class="settings-btn" id="saveKeyBtn">Save</button>
+          <span class="key-status missing" id="keyStatus">No key saved</span>
+        </div>
+        <div class="settings-row">
+          <label for="modelSelect">Model</label>
+          <select id="modelSelect">
+            <option value="gemini-2.5-flash">Gemini 2.5 Flash — free, balanced (default)</option>
+            <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash-Lite — free, fastest</option>
+          </select>
+        </div>
+        <p class="settings-note">Get a free key at <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a> — no credit card needed. Both models above run at $0 with free Google Search grounding, up to 500 lookups/day. It's saved only in this browser's local storage, never written into this repo.</p>
+      </div>
+    </details>
+
+    <div class="search-row">
+      <input class="ticker-input" id="tickerInput" placeholder="Ticker or company name (e.g. AAPL)" autocomplete="off">
+      <button class="research-btn" id="researchBtn">Research</button>
+    </div>
+    <div class="status-line" id="statusLine"></div>
+    <div class="history-row" id="historyRow"></div>
+
+    <div id="resultArea"></div>
+
+    <div class="disclaimer">
+      Ledger synthesizes public filings, news, and market data using web search — it does not have live pricing feeds and can miss or misread recent events. It's a research aid for your own judgment, not investment advice, and nothing here is a recommendation to buy or sell. Verify anything material before acting on it.
+    </div>
+  </div>
+</div>
+
+<script>
+const CRITERIA_ORDER = [
+  "Revenue Growth","Earnings & Margins","Free Cash Flow","Debt Load",
+  "Competitive Moat","Valuation","Return on Equity","Return on Invested Capital",
+  "Management Quality","Industry Trends","Key Risks","Dividend"
+];
+
+const input = document.getElementById('tickerInput');
+const btn = document.getElementById('researchBtn');
+const statusLine = document.getElementById('statusLine');
+const historyRow = document.getElementById('historyRow');
+const resultArea = document.getElementById('resultArea');
+const apiKeyInput = document.getElementById('apiKeyInput');
+const saveKeyBtn = document.getElementById('saveKeyBtn');
+const keyStatus = document.getElementById('keyStatus');
+const modelSelect = document.getElementById('modelSelect');
+const settingsPanel = document.getElementById('settingsPanel');
+
+function setStatus(text, isErr){ statusLine.textContent = text || ''; statusLine.classList.toggle('err', !!isErr); }
+function scoreClass(score){ const n = Math.round(Number(score)); return 's' + Math.min(5, Math.max(1, n || 3)); }
+function verdictClass(v){ const s=(v||'').toLowerCase(); if(s.includes('buy'))return 'buy'; if(s.includes('pass')||s.includes('avoid')||s.includes('sell'))return 'pass'; return 'hold'; }
+function escapeHtml(str){ const d=document.createElement('div'); d.textContent = str==null? '' : String(str); return d.innerHTML; }
+
+// --- API key / model persistence ---
+function loadKeyUi(){
+  const key = localStorage.getItem('ledger_gemini_key') || '';
+  const model = localStorage.getItem('ledger_gemini_model') || 'gemini-2.5-flash';
+  modelSelect.value = model;
+  if (key){
+    apiKeyInput.value = key;
+    keyStatus.textContent = 'Key saved (' + key.slice(0,8) + '…)';
+    keyStatus.classList.remove('missing');
+  } else {
+    keyStatus.textContent = 'No key saved';
+    keyStatus.classList.add('missing');
+    settingsPanel.open = true;
+  }
+}
+saveKeyBtn.addEventListener('click', () => {
+  const key = apiKeyInput.value.trim();
+  if (!key){ keyStatus.textContent = 'No key saved'; keyStatus.classList.add('missing'); return; }
+  localStorage.setItem('ledger_gemini_key', key);
+  keyStatus.textContent = 'Key saved (' + key.slice(0,8) + '…)';
+  keyStatus.classList.remove('missing');
+});
+modelSelect.addEventListener('change', () => localStorage.setItem('ledger_gemini_model', modelSelect.value));
+
+// --- history ---
+function getHistory(){ try{ return JSON.parse(localStorage.getItem('ledger_history') || '[]'); }catch(e){ return []; } }
+function saveHistory(entry){
+  const hist = getHistory().filter(h => h.ticker !== entry.ticker);
+  hist.unshift(entry);
+  localStorage.setItem('ledger_history', JSON.stringify(hist.slice(0,12)));
+}
+function cacheResult(ticker, data){ localStorage.setItem('ledger_result_' + ticker.toUpperCase(), JSON.stringify(data)); }
+function getCachedResult(ticker){ try{ return JSON.parse(localStorage.getItem('ledger_result_' + ticker.toUpperCase())); }catch(e){ return null; } }
+
+function renderHistory(){
+  const hist = getHistory();
+  if (!hist.length){ historyRow.innerHTML = ''; return; }
+  historyRow.innerHTML = hist.map(h =>
+    `<button class="history-chip" data-ticker="${escapeHtml(h.ticker)}">${escapeHtml(h.ticker)} · ${escapeHtml(h.verdict)}</button>`
+  ).join('') + `<button class="history-clear" id="clearHist">clear history</button>`;
+
+  historyRow.querySelectorAll('.history-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      const t = chip.getAttribute('data-ticker');
+      const cached = getCachedResult(t);
+      if (cached){ renderReport(cached); setStatus('Loaded from your last check on ' + t + '.'); }
+    });
+  });
+  const clearBtn = document.getElementById('clearHist');
+  if (clearBtn) clearBtn.addEventListener('click', () => { localStorage.removeItem('ledger_history'); renderHistory(); });
+}
+
+// --- rendering ---
+function ratingBox(label, value, unit, note){
+  return `<div class="rating-box">
+    <div class="rating-label">${escapeHtml(label)}</div>
+    <div class="rating-value${unit==='price'?' buyprice':''}">${escapeHtml(value)}${unit==='10'?'<small>/10</small>':''}</div>
+    <div class="rating-note">${escapeHtml(note || '')}</div>
+  </div>`;
+}
+
+function renderReport(data){
+  const vClass = verdictClass(data.verdict);
+  const criteria = Array.isArray(data.criteria) ? data.criteria : [];
+
+  let rows = '';
+  criteria.forEach((c, i) => {
+    const label = c.name || CRITERIA_ORDER[i] || ('Item ' + (i+1));
+    rows += `<li class="criteria-row">
+      <span class="crit-num">${String(i+1).padStart(2,'0')}</span>
+      <span class="crit-name">${escapeHtml(label)}</span>
+      <span class="crit-score ${scoreClass(c.score)}">${c.score != null ? escapeHtml(c.score) + '/5' : '—'}</span>
+      <span class="crit-note">${escapeHtml(c.note || '')}</span>
+    </li>`;
+  });
+
+  const risks = Array.isArray(data.risks) ? data.risks : [];
+  const risksHtml = risks.length ? `<div class="risks-box"><strong>Worth watching</strong>${risks.map(r => escapeHtml(r)).join('<br>')}</div>` : '';
+
+  const trio = `<div class="rating-trio">
+    ${ratingBox('Riskiness', data.riskRating != null ? data.riskRating : '—', '10', data.riskNote)}
+    ${ratingBox('Buy at or below', data.buyPrice || '—', 'price', data.buyPriceNote)}
+    ${ratingBox('Overall rating', data.overallRating != null ? data.overallRating : '—', '10', data.overallNote)}
+  </div>`;
+
+  resultArea.innerHTML = `<div class="report">
+    <div class="stamp ${vClass}">${escapeHtml(data.verdict || 'Hold')}</div>
+    <div class="report-head">
+      <p class="company-name">${escapeHtml(data.company || data.ticker || 'Unknown')}</p>
+      <p class="company-meta">${escapeHtml(data.ticker || '')}${data.asOf ? ' · as of ' + escapeHtml(data.asOf) : ''}</p>
+    </div>
+    <p class="thesis">${escapeHtml(data.thesis || '')}</p>
+    <ul class="criteria-list">${rows}</ul>
+    ${risksHtml}
+    ${trio}
+    <p class="report-footer">Scores and ratings are this model's read of public information at research time, not a market signal. Riskiness: 1 = very low risk, 10 = very high risk. Overall: 1 = avoid, 10 = exceptional. Cross-check anything you plan to act on.</p>
+  </div>`;
+}
+
+function renderRaw(text){ resultArea.innerHTML = `<div class="raw-fallback">${escapeHtml(text)}</div>`; }
+
+function buildPrompt(query){
+  return `You are helping a personal investor run a single company through a fixed 12-line fundamentals checklist, using web search for current public information (recent filings, earnings reports, and reputable financial news/data sites).
+
+Company or ticker to research: "${query}"
+
+Score the company on EXACTLY these 12 items, in this order, each 1-5 (5 = strong, 3 = mixed/average, 1 = weak/concerning), with one short evidence-based note (max ~18 words) per item:
+1. Revenue Growth
+2. Earnings & Margins
+3. Free Cash Flow
+4. Debt Load
+5. Competitive Moat
+6. Valuation
+7. Return on Equity
+8. Return on Invested Capital
+9. Management Quality
+10. Industry Trends
+11. Key Risks (score = how contained the risks are; 5 = few/manageable, 1 = severe)
+12. Dividend (if the company pays no dividend, score null and note "No dividend")
+
+Then provide:
+- An overall verdict word: "Buy", "Hold", or "Pass" (quality and price together, not hype)
+- A 2-sentence thesis
+- 2-4 key risks to watch
+- riskRating: integer 1-10, where 1 = very low risk (stable, defensive, low volatility) and 10 = very high risk (speculative, volatile, fragile balance sheet), with a one-sentence riskNote
+- buyPrice: a specific target price or price range you'd want to see before buying, based on the valuation and quality factors above (e.g. "$142 or lower"), with a one-sentence buyPriceNote explaining the reasoning
+- overallRating: integer 1-10 combining everything above (quality, valuation, risk), where 1 = avoid and 10 = exceptional, with a one-sentence overallNote
+- ticker symbol, full company name, and the approximate period your financial figures are drawn from (e.g. "Q2 2026" or "FY2025")
+
+Respond with ONLY valid JSON, no markdown fences, no commentary, in exactly this shape:
+{"ticker":"...","company":"...","asOf":"...","verdict":"Buy|Hold|Pass","thesis":"...","criteria":[{"name":"Revenue Growth","score":4,"note":"..."}, ... all 12 in order ...],"risks":["...","..."],"riskRating":6,"riskNote":"...","buyPrice":"...","buyPriceNote":"...","overallRating":7,"overallNote":"..."}`;
+}
+
+function extractJson(text){
+  const cleaned = text.replace(/```json/gi,'').replace(/```/g,'').trim();
+  const start = cleaned.indexOf('{');
+  const end = cleaned.lastIndexOf('}');
+  if (start === -1 || end === -1) throw new Error('No JSON object found in response.');
+  return JSON.parse(cleaned.slice(start, end+1));
+}
+
+async function research(){
+  const query = input.value.trim();
+  const apiKey = localStorage.getItem('ledger_gemini_key');
+  const model = localStorage.getItem('ledger_gemini_model') || 'gemini-2.5-flash';
+
+  if (!apiKey){ setStatus('Add your Gemini API key above first.', true); settingsPanel.open = true; return; }
+  if (!query){ setStatus('Enter a ticker or company name first.', true); return; }
+
+  btn.disabled = true;
+  resultArea.innerHTML = '';
+  setStatus('Researching ' + query.toUpperCase() + ' — pulling filings, earnings, and recent news…');
+
+  try{
+    const response = await fetch(
+      'https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-goog-api-key': apiKey
+        },
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts: [{ text: buildPrompt(query) }] }],
+          tools: [{ google_search: {} }],
+          generationConfig: { maxOutputTokens: 2048, temperature: 0.4 }
+        })
+      }
+    );
+
+    if (!response.ok){
+      const errBody = await response.text().catch(() => '');
+      throw new Error('Request failed (' + response.status + '). ' + (errBody ? errBody.slice(0,200) : ''));
+    }
+
+    const data = await response.json();
+    const parts = (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts) || [];
+    const textBlocks = parts.filter(p => p.text).map(p => p.text).join('\n');
+    if (!textBlocks.trim()) throw new Error('No response text returned — try again.');
+
+    let parsed;
+    try{ parsed = extractJson(textBlocks); }
+    catch(parseErr){
+      setStatus('Got a response but could not parse it as structured data — showing raw output.', true);
+      renderRaw(textBlocks);
+      btn.disabled = false;
+      return;
+    }
+
+    renderReport(parsed);
+    setStatus('Done. Verdict: ' + (parsed.verdict || 'Hold') + '.');
+
+    const tickerKey = (parsed.ticker || query).toUpperCase();
+    cacheResult(tickerKey, parsed);
+    saveHistory({ ticker: tickerKey, verdict: parsed.verdict || 'Hold' });
+    renderHistory();
+
+  }catch(err){
+    setStatus(err.message || 'Something went wrong. Try again.', true);
+  }finally{
+    btn.disabled = false;
+  }
+}
+
+btn.addEventListener('click', research);
+input.addEventListener('keydown', (e) => { if (e.key === 'Enter') research(); });
+
+loadKeyUi();
+renderHistory();
+</script>
+</body>
+</html>
