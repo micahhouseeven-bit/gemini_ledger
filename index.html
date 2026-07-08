@@ -308,11 +308,14 @@ Respond with ONLY valid JSON, no markdown fences, no commentary, in exactly this
 }
 
 function extractJson(text){
-  const cleaned = text.replace(/```json/gi,'').replace(/```/g,'').trim();
+  let cleaned = text.replace(/```json/gi,'').replace(/```/g,'').trim();
   const start = cleaned.indexOf('{');
   const end = cleaned.lastIndexOf('}');
   if (start === -1 || end === -1) throw new Error('No JSON object found in response.');
-  return JSON.parse(cleaned.slice(start, end+1));
+  cleaned = cleaned.slice(start, end+1);
+  // Repair common small issues: trailing commas before } or ]
+  cleaned = cleaned.replace(/,(\s*[}\]])/g, '$1');
+  return JSON.parse(cleaned);
 }
 
 async function research(){
@@ -339,7 +342,7 @@ async function research(){
         body: JSON.stringify({
           contents: [{ role: 'user', parts: [{ text: buildPrompt(query) }] }],
           tools: [{ google_search: {} }],
-          generationConfig: { maxOutputTokens: 2048, temperature: 0.4 }
+          generationConfig: { maxOutputTokens: 4096, temperature: 0.4 }
         })
       }
     );
@@ -350,14 +353,22 @@ async function research(){
     }
 
     const data = await response.json();
-    const parts = (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts) || [];
+    const candidate = data.candidates && data.candidates[0];
+    const parts = (candidate && candidate.content && candidate.content.parts) || [];
     const textBlocks = parts.filter(p => p.text).map(p => p.text).join('\n');
     if (!textBlocks.trim()) throw new Error('No response text returned — try again.');
+
+    const wasTruncated = candidate && candidate.finishReason === 'MAX_TOKENS';
 
     let parsed;
     try{ parsed = extractJson(textBlocks); }
     catch(parseErr){
-      setStatus('Got a response but could not parse it as structured data — showing raw output.', true);
+      setStatus(
+        wasTruncated
+          ? 'The response got cut off before finishing — try Research again, or switch to Flash-Lite for a shorter reply.'
+          : 'Got a response but could not parse it as structured data — showing raw output.',
+        true
+      );
       renderRaw(textBlocks);
       btn.disabled = false;
       return;
